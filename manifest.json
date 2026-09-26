@@ -1,0 +1,9 @@
+{
+  "id": "brewin-lan",
+  "name": "Brewin LAN",
+  "version": "1.0.1",
+  "minAppVersion": "1.4.0",
+  "description": "First-party LAN manager: devices as notes with typed icons, IP and VLAN assignment, switch-port maps, a live topology diagram, address hygiene checks and dnsmasq/hosts exports.",
+  "author": "lepusalbus",
+  "isDesktopOnly": false
+}

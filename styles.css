@@ -1,0 +1,594 @@
+/* ============================================================================
+   Brewin LAN — stylesheet
+   Theme-aware throughout: every colour is either an Obsidian variable or one of
+   the eight segment slots below, which have their own dark-mode values.
+   ============================================================================ */
+
+body {
+  --brewin-lan-seg-1: #2f6fd0;
+  --brewin-lan-seg-2: #0d8f9e;
+  --brewin-lan-seg-3: #3f9142;
+  --brewin-lan-seg-4: #c8940a;
+  --brewin-lan-seg-5: #d9642a;
+  --brewin-lan-seg-6: #c2352f;
+  --brewin-lan-seg-7: #7d4fd1;
+  --brewin-lan-seg-8: #c33c86;
+}
+body.theme-dark {
+  --brewin-lan-seg-1: #4f93e8;
+  --brewin-lan-seg-2: #2bb3c4;
+  --brewin-lan-seg-3: #56b45b;
+  --brewin-lan-seg-4: #e0b135;
+  --brewin-lan-seg-5: #ef8451;
+  --brewin-lan-seg-6: #e35a54;
+  --brewin-lan-seg-7: #a07ce8;
+  --brewin-lan-seg-8: #e069a6;
+}
+
+.brewin-lan {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 0;
+  overflow: hidden;
+}
+.brewin-lan-hidden { display: none !important; }
+.brewin-lan-muted { color: var(--text-muted); }
+.brewin-lan-mono { font-family: var(--font-monospace); font-size: 0.92em; }
+.brewin-lan-broken { color: var(--text-error); text-decoration: line-through; }
+.brewin-lan-link { cursor: pointer; }
+.brewin-lan-link:hover { color: var(--text-accent); text-decoration: underline; }
+.brewin-lan-empty {
+  color: var(--text-muted);
+  text-align: center;
+  padding: 40px 16px;
+  font-size: var(--font-ui-small);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.brewin-lan-note {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  padding: 6px 8px;
+  border-left: 2px solid var(--background-modifier-border);
+  margin: 8px 0;
+}
+
+/* ── Toolbar and tabs ─────────────────────────────────────────────────────── */
+.brewin-lan-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+}
+.brewin-lan-tabs { display: flex; gap: 2px; flex-wrap: wrap; }
+.brewin-lan-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  box-shadow: none;
+  border-radius: var(--radius-s);
+  padding: 4px 10px;
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.brewin-lan-tab:hover { background: var(--background-modifier-hover); }
+.brewin-lan-tab.is-on { background: var(--background-modifier-active-hover); color: var(--text-normal); font-weight: 600; }
+.brewin-lan-tab-icon { display: inline-flex; }
+.brewin-lan-tab-icon .svg-icon { width: 15px; height: 15px; }
+.brewin-lan-tab-badge {
+  font-size: 0.78em;
+  font-weight: 600;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--background-modifier-border);
+  color: var(--text-muted);
+}
+.brewin-lan-tab-badge.is-error { background: var(--text-error); color: var(--text-on-accent); }
+.brewin-lan-tab-badge.is-warn { background: var(--text-warning); color: var(--text-on-accent); }
+.brewin-lan-actions { display: flex; gap: 6px; margin-left: auto; align-items: center; }
+.brewin-lan-chip {
+  font-size: var(--font-ui-smaller);
+  padding: 3px 9px;
+  border-radius: var(--radius-s);
+  cursor: pointer;
+}
+.brewin-lan-icon-btn {
+  background: transparent;
+  box-shadow: none;
+  padding: 2px 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.brewin-lan-icon-btn:hover { color: var(--text-normal); background: var(--background-modifier-hover); }
+
+.brewin-lan-body { flex: 1; min-height: 0; overflow: auto; padding: 12px; }
+.brewin-lan-body.is-topology { padding: 0; overflow: hidden; }
+
+/* ── Topology ─────────────────────────────────────────────────────────────── */
+.brewin-lan-topo-wrap { position: relative; height: 100%; display: flex; flex-direction: column; }
+.brewin-lan-stage {
+  position: relative;
+  flex: 1;
+  min-height: 220px;
+  overflow: hidden;
+  cursor: grab;
+  outline: none;
+  /* The reason pinch works: without this the browser claims the gesture as a page scroll and the
+     pointer events stop arriving mid-drag. Set in code too, so it cannot be lost with the theme. */
+  touch-action: none;
+  overscroll-behavior: contain;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.brewin-lan-stage:active { cursor: grabbing; }
+.brewin-lan-world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.brewin-lan-edges {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  overflow: visible;
+  pointer-events: none;
+}
+.brewin-lan-edge {
+  stroke: var(--background-modifier-border-hover);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.brewin-lan-edge.is-trunk { stroke-width: 4; stroke-dasharray: none; }
+.brewin-lan-edge.is-cycle { stroke: var(--text-error); stroke-dasharray: 4 4; }
+.brewin-lan-edge.is-dimmed { opacity: 0.18; }
+
+.brewin-lan-node {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  width: 120px;
+  cursor: pointer;
+  outline: none;
+}
+.brewin-lan-node.is-dimmed { opacity: 0.25; }
+.brewin-lan-node-icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  background: var(--background-primary);
+  border: 2px solid var(--node-colour, var(--text-muted));
+  color: var(--node-colour, var(--text-muted));
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+}
+.brewin-lan-node-icon .svg-icon { width: 20px; height: 20px; }
+.brewin-lan-node:hover .brewin-lan-node-icon { background: var(--background-modifier-hover); }
+.brewin-lan-node.is-selected .brewin-lan-node-icon {
+  box-shadow: 0 0 0 3px var(--background-modifier-border-focus);
+}
+.brewin-lan-node:focus-visible .brewin-lan-node-icon { box-shadow: 0 0 0 3px var(--background-modifier-border-focus); }
+.brewin-lan-node.is-planned .brewin-lan-node-icon { border-style: dashed; }
+.brewin-lan-node.is-down { opacity: 0.55; }
+.brewin-lan-node.is-detached .brewin-lan-node-icon { border-color: var(--text-error); }
+.brewin-lan-node-flag {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  color: var(--text-on-accent);
+}
+.brewin-lan-node-flag.is-error { background: var(--text-error); }
+.brewin-lan-node-flag.is-warn { background: var(--text-warning); }
+.brewin-lan-node-label { text-align: center; line-height: 1.2; }
+.brewin-lan-node-title { font-size: var(--font-ui-smaller); font-weight: 600; }
+.brewin-lan-node-ip { font-family: var(--font-monospace); font-size: 0.72em; color: var(--text-muted); }
+
+.brewin-lan-port-tag {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-family: var(--font-monospace);
+  font-size: 9px;
+  line-height: 1;
+  padding: 1px 4px;
+  border-radius: 6px;
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  border: 1px solid var(--background-modifier-border);
+  pointer-events: none;
+}
+.brewin-lan-port-tag.is-trunk { color: var(--text-accent); font-weight: 700; }
+
+.brewin-lan-band-label {
+  position: absolute;
+  transform: translate(-100%, -50%);
+  padding-right: 10px;
+  font-size: var(--font-ui-smaller);
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--band-colour, var(--text-muted));
+}
+.brewin-lan-band-rule {
+  position: absolute;
+  height: 1px;
+  transform: translateY(-50%);
+  background: var(--background-modifier-border);
+  pointer-events: none;
+}
+
+/* ── Zoom controls ────────────────────────────────────────────────────────── */
+.brewin-lan-zoom {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius-m);
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.14);
+}
+.brewin-lan-zoom-btn {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  border-radius: var(--radius-s);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.brewin-lan-zoom-btn:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
+.brewin-lan-zoom-btn .svg-icon { width: 16px; height: 16px; }
+.brewin-lan-zoom-level {
+  font-size: 0.68em;
+  text-align: center;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  padding: 1px 0;
+}
+
+.brewin-lan-legend {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 6px 12px;
+  border-top: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+}
+.brewin-lan-legend-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--font-ui-smaller);
+  padding: 2px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--background-modifier-border);
+  cursor: pointer;
+  color: var(--text-muted);
+}
+.brewin-lan-legend-chip:hover { background: var(--background-modifier-hover); }
+.brewin-lan-legend-chip.is-on { background: var(--background-modifier-active-hover); color: var(--text-normal); }
+.brewin-lan-legend-count { font-variant-numeric: tabular-nums; opacity: 0.7; }
+.brewin-lan-legend-empty { font-size: var(--font-ui-smaller); color: var(--text-muted); }
+.brewin-lan-swatch {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  margin-right: 4px;
+  vertical-align: -1px;
+}
+
+/* ── Device profile ───────────────────────────────────────────────────────── */
+.brewin-lan-profile {
+  border-top: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  padding: 10px 12px;
+  max-height: 45%;
+  overflow: auto;
+}
+.brewin-lan-profile-head { display: flex; align-items: center; gap: 10px; }
+.brewin-lan-profile-icon { display: grid; place-items: center; color: var(--text-muted); }
+.brewin-lan-profile-icon .svg-icon { width: 22px; height: 22px; }
+.brewin-lan-profile-title { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.brewin-lan-profile-sub { font-size: var(--font-ui-smaller); color: var(--text-muted); }
+.brewin-lan-profile-head > button:last-child { margin-left: auto; }
+.brewin-lan-status {
+  font-size: 0.7em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--background-modifier-border);
+  color: var(--text-muted);
+}
+.brewin-lan-status.is-active { background: var(--color-green); color: var(--text-on-accent); }
+.brewin-lan-status.is-planned { background: var(--color-blue); color: var(--text-on-accent); }
+.brewin-lan-status.is-offline { background: var(--text-warning); color: var(--text-on-accent); }
+.brewin-lan-status.is-retired { background: var(--background-modifier-border); }
+.brewin-lan-profile-links { margin-top: 8px; display: flex; flex-direction: column; gap: 2px; }
+.brewin-lan-kv { display: flex; gap: 8px; font-size: var(--font-ui-smaller); align-items: baseline; }
+.brewin-lan-k { color: var(--text-muted); min-width: 110px; flex-shrink: 0; }
+.brewin-lan-profile-issues { margin-top: 8px; display: flex; flex-direction: column; gap: 3px; }
+.brewin-lan-issue { display: flex; gap: 6px; align-items: baseline; font-size: var(--font-ui-smaller); }
+.brewin-lan-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+.brewin-lan-dot.is-error { background: var(--text-error); }
+.brewin-lan-dot.is-warn { background: var(--text-warning); }
+.brewin-lan-dot.is-info { background: var(--text-muted); }
+
+/* ── Port map ─────────────────────────────────────────────────────────────── */
+.brewin-lan-ports { margin-top: 10px; }
+.brewin-lan-ports-head { font-size: var(--font-ui-smaller); color: var(--text-muted); margin-bottom: 4px; }
+.brewin-lan-port-grid { display: flex; flex-wrap: wrap; gap: 4px; }
+.brewin-lan-port {
+  display: flex;
+  flex-direction: column;
+  min-width: 74px;
+  padding: 3px 6px;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.25;
+}
+.brewin-lan-port.is-used { border-color: var(--color-green); cursor: pointer; }
+.brewin-lan-port.is-conflict { border-color: var(--text-error); background: rgba(220, 70, 60, 0.1); }
+.brewin-lan-port.is-trunk { border-style: double; border-width: 3px; }
+.brewin-lan-port.is-phantom { opacity: 0.6; border-style: dotted; }
+.brewin-lan-port.is-poe .brewin-lan-port-no::after { content: " ⚡"; }
+.brewin-lan-port-no { font-family: var(--font-monospace); color: var(--text-muted); font-size: 0.85em; }
+.brewin-lan-port-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 110px; }
+
+/* ── Tables ───────────────────────────────────────────────────────────────── */
+.brewin-lan-table { width: 100%; border-collapse: collapse; font-size: var(--font-ui-smaller); }
+.brewin-lan-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--background-modifier-border);
+  padding: 4px 6px;
+  white-space: nowrap;
+}
+.brewin-lan-table th.is-sortable { cursor: pointer; }
+.brewin-lan-table th.is-sorted { color: var(--text-normal); }
+.brewin-lan-table th.is-sorted::after { content: " ↓"; }
+.brewin-lan-table td { padding: 4px 6px; border-bottom: 1px solid var(--background-modifier-border-hover); vertical-align: top; }
+.brewin-lan-table tbody tr:hover { background: var(--background-modifier-hover); }
+.brewin-lan-cell-icon { width: 34px; white-space: nowrap; }
+.brewin-lan-row-icon { display: inline-grid; place-items: center; color: var(--text-muted); }
+.brewin-lan-row-icon .svg-icon { width: 15px; height: 15px; }
+.brewin-lan-locate { margin-left: 6px; color: var(--text-muted); cursor: pointer; }
+.brewin-lan-locate:hover { color: var(--text-accent); }
+.brewin-lan-segchip { display: flex; align-items: center; white-space: nowrap; }
+.brewin-lan-iface-table { margin-top: 8px; }
+.brewin-lan-iface-note td { color: var(--text-muted); font-size: 0.92em; padding-top: 0; border-bottom: none; }
+
+.brewin-lan-filterbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+.brewin-lan-search { flex: 1; min-width: 160px; }
+.brewin-lan-filter-count { font-size: var(--font-ui-smaller); color: var(--text-muted); margin-left: auto; }
+.brewin-lan-check { display: inline-flex; align-items: center; gap: 5px; font-size: var(--font-ui-smaller); color: var(--text-muted); }
+
+/* ── Address map ──────────────────────────────────────────────────────────── */
+.brewin-lan-segbar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.brewin-lan-segtab {
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--font-ui-smaller);
+  padding: 3px 9px;
+  border-radius: 10px;
+  border: 1px solid var(--background-modifier-border);
+  cursor: pointer;
+  color: var(--text-muted);
+}
+.brewin-lan-segtab.is-on { background: var(--background-modifier-active-hover); color: var(--text-normal); font-weight: 600; }
+.brewin-lan-seghead { display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.brewin-lan-seghead-title { display: flex; flex-direction: column; gap: 2px; font-weight: 600; }
+.brewin-lan-facts { display: flex; gap: 14px; flex-wrap: wrap; margin-left: auto; }
+.brewin-lan-fact { text-align: right; }
+.brewin-lan-fact-value { font-size: 1.15em; font-weight: 600; font-variant-numeric: tabular-nums; }
+.brewin-lan-fact-label { font-size: 0.72em; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
+.brewin-lan-segmeta { margin: 10px 0; display: flex; flex-direction: column; gap: 2px; }
+
+.brewin-lan-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(30px, 1fr));
+  gap: 2px;
+  margin: 10px 0;
+}
+.brewin-lan-cell {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  min-height: 22px;
+  border-radius: 3px;
+  font-family: var(--font-monospace);
+  font-size: 0.68em;
+  color: var(--text-faint);
+  background: var(--background-secondary);
+  border: 1px solid transparent;
+}
+.brewin-lan-cell.is-free { background: var(--background-secondary); }
+.brewin-lan-cell.is-free.is-clickable { cursor: pointer; }
+.brewin-lan-cell.is-free.is-clickable:hover { border-color: var(--text-accent); color: var(--text-normal); }
+.brewin-lan-cell.is-pool { background: var(--background-modifier-border); color: var(--text-muted); }
+.brewin-lan-cell.is-reserved { background: repeating-linear-gradient(45deg, var(--background-secondary) 0 3px, var(--background-modifier-border) 3px 6px); }
+.brewin-lan-cell.is-device,
+.brewin-lan-cell.is-gateway {
+  background: var(--cell-colour, var(--text-muted));
+  color: var(--text-on-accent);
+  font-weight: 600;
+  cursor: pointer;
+}
+.brewin-lan-cell.is-gateway { box-shadow: inset 0 0 0 2px var(--background-primary); }
+.brewin-lan-cell.is-inpool { outline: 1px dashed var(--text-warning); outline-offset: -3px; }
+.brewin-lan-cell.is-network,
+.brewin-lan-cell.is-broadcast { background: transparent; border: 1px dashed var(--background-modifier-border); }
+.brewin-lan-gridkey { display: flex; gap: 12px; flex-wrap: wrap; font-size: var(--font-ui-smaller); color: var(--text-muted); }
+.brewin-lan-gridkey-item { display: inline-flex; align-items: center; gap: 5px; }
+.brewin-lan-gridkey-item .brewin-lan-cell { width: 16px; min-height: 16px; }
+.brewin-lan-strays {
+  margin-top: 16px;
+  padding: 8px 10px;
+  border-radius: var(--radius-s);
+  background: var(--background-secondary);
+}
+.brewin-lan-strays-head { font-size: var(--font-ui-smaller); font-weight: 600; margin-bottom: 4px; }
+
+/* ── Health ───────────────────────────────────────────────────────────────── */
+.brewin-lan-healthsummary { display: flex; gap: 10px; margin-bottom: 14px; }
+.brewin-lan-healthtile {
+  flex: 0 0 96px;
+  padding: 8px 10px;
+  border-radius: var(--radius-s);
+  background: var(--background-secondary);
+  border-left: 3px solid var(--text-muted);
+  text-align: left;
+}
+.brewin-lan-healthtile.is-error { border-left-color: var(--text-error); }
+.brewin-lan-healthtile.is-warn { border-left-color: var(--text-warning); }
+.brewin-lan-healthtile.is-clear { opacity: 0.55; }
+.brewin-lan-healthtile .brewin-lan-fact-value,
+.brewin-lan-healthtile .brewin-lan-fact-label { text-align: left; }
+.brewin-lan-healthgroup { margin-bottom: 18px; }
+.brewin-lan-section-head { display: flex; align-items: center; gap: 6px; }
+.brewin-lan-section-title { font-weight: 600; font-size: var(--font-ui-small); }
+.brewin-lan-count {
+  font-size: 0.78em;
+  font-weight: 600;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: var(--background-modifier-border);
+  color: var(--text-muted);
+}
+.brewin-lan-section-blurb { font-size: var(--font-ui-smaller); color: var(--text-muted); margin: 2px 0 6px; }
+.brewin-lan-issue-row {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--background-modifier-border-hover);
+  font-size: var(--font-ui-smaller);
+}
+.brewin-lan-issue-text { flex: 1; }
+.brewin-lan-issue-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+.brewin-lan-code { font-family: var(--font-monospace); font-size: 0.8em; color: var(--text-faint); }
+
+/* ── Export ───────────────────────────────────────────────────────────────── */
+.brewin-lan-exportactions { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.brewin-lan-exportactions .brewin-lan-filter-count { margin-left: 0; margin-right: auto; }
+.brewin-lan-export {
+  background: var(--background-secondary);
+  border-radius: var(--radius-s);
+  padding: 10px 12px;
+  max-height: 55vh;
+  overflow: auto;
+  font-size: 0.85em;
+  white-space: pre;
+}
+.brewin-lan-skipped {
+  margin-top: 12px;
+  padding: 8px 10px;
+  border-radius: var(--radius-s);
+  background: var(--background-secondary);
+}
+.brewin-lan-skipped-head { font-size: var(--font-ui-smaller); font-weight: 600; margin-bottom: 4px; }
+
+/* ── Modals ───────────────────────────────────────────────────────────────── */
+.brewin-lan-modal-title { width: 100%; margin-bottom: 10px; }
+.brewin-lan-modal-buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.brewin-lan-typelist { max-height: 320px; overflow: auto; margin-bottom: 8px; }
+.brewin-lan-typelist .setting-item { padding: 6px 0; border: none; }
+.brewin-lan-typelist input[type="text"] { width: 110px; }
+
+/* ── Touch and narrow panes ───────────────────────────────────────────────────
+   Two separate concerns: a phone needs bigger things to hit (`body.is-mobile`,
+   which Obsidian sets), and a narrow pane needs less in it (the media query) —
+   a tablet in a split view is one without the other. */
+
+body.is-mobile .brewin-lan-zoom { top: 10px; right: 10px; gap: 4px; padding: 4px; }
+body.is-mobile .brewin-lan-zoom-btn { width: 40px; height: 40px; }
+body.is-mobile .brewin-lan-zoom-btn .svg-icon { width: 19px; height: 19px; }
+body.is-mobile .brewin-lan-zoom-level { font-size: 0.72em; }
+body.is-mobile .brewin-lan-tab { padding: 7px 12px; }
+body.is-mobile .brewin-lan-chip { padding: 6px 11px; }
+body.is-mobile .brewin-lan-icon-btn { padding: 6px 10px; }
+body.is-mobile .brewin-lan-legend-chip,
+body.is-mobile .brewin-lan-segtab { padding: 6px 11px; }
+body.is-mobile .brewin-lan-cell { min-height: 30px; font-size: 0.72em; }
+body.is-mobile .brewin-lan-port { min-height: 38px; justify-content: center; }
+body.is-mobile .brewin-lan-locate { padding: 0 6px; font-size: 1.1em; }
+body.is-mobile .brewin-lan-table td,
+body.is-mobile .brewin-lan-table th { padding: 7px 6px; }
+/* A tap has no hover, so the row a finger is on should still stand out when tapped. */
+body.is-mobile .brewin-lan-table tbody tr:active { background: var(--background-modifier-hover); }
+/* Deliberately no `touch-action` override on a node: it inherits `none` from the stage so a drag
+   can start on a device icon, which on a phone is most of what the thumb lands on. Taps are told
+   apart from drags by distance, in topologyTab.ts. */
+
+/* Strips of chips scroll sideways rather than stacking into a wall of rows that
+   eats the diagram. */
+.brewin-lan-tabs,
+.brewin-lan-legend,
+.brewin-lan-segbar {
+  scrollbar-width: none;
+}
+.brewin-lan-tabs::-webkit-scrollbar,
+.brewin-lan-legend::-webkit-scrollbar,
+.brewin-lan-segbar::-webkit-scrollbar { display: none; }
+
+@media (max-width: 700px) {
+  .brewin-lan-toolbar { padding: 6px 8px; gap: 6px; }
+  .brewin-lan-tabs,
+  .brewin-lan-legend,
+  .brewin-lan-segbar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x;
+  }
+  .brewin-lan-tabs { flex: 1 1 100%; }
+  .brewin-lan-actions { margin-left: 0; flex: 1 1 100%; }
+  .brewin-lan-tab span:not(.brewin-lan-tab-icon):not(.brewin-lan-tab-badge) { display: none; }
+  .brewin-lan-tab.is-on span:not(.brewin-lan-tab-icon):not(.brewin-lan-tab-badge) { display: inline; }
+  .brewin-lan-body { padding: 8px; }
+  .brewin-lan-k { min-width: 80px; }
+  .brewin-lan-facts { margin-left: 0; gap: 10px; }
+  .brewin-lan-fact { text-align: left; }
+  .brewin-lan-profile { max-height: 52%; }
+  .brewin-lan-col-secondary { display: none; }
+  .brewin-lan-export { max-height: 40vh; font-size: 0.8em; }
+  .brewin-lan-healthsummary { gap: 6px; }
+  .brewin-lan-healthtile { flex: 1 1 0; }
+  .brewin-lan-node { width: 96px; }
+  .brewin-lan-node-title { font-size: 0.72em; }
+}
+
+/* Very narrow: the node labels are what collides first. */
+@media (max-width: 420px) {
+  .brewin-lan-node { width: 82px; }
+  .brewin-lan-node-ip { font-size: 0.66em; }
+  .brewin-lan-grid { grid-template-columns: repeat(auto-fill, minmax(34px, 1fr)); }
+}

@@ -1,0 +1,5 @@
+node_modules/
+# This device's own settings, not part of the plugin.
+data.json
+data.json.bak
+*.log

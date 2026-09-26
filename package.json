@@ -1,0 +1,23 @@
+{
+  "name": "brewin-lan",
+  "version": "1.0.1",
+  "description": "First-party LAN manager for Obsidian: devices, IPs, VLANs, ports and topology from note frontmatter",
+  "main": "main.js",
+  "type": "module",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+    "test": "node --import tsx --test tests/*.test.ts"
+  },
+  "keywords": ["obsidian", "lan", "network", "ipam", "vlan"],
+  "author": "lepusalbus",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "builtin-modules": "^3.3.0",
+    "esbuild": "^0.21.5",
+    "obsidian": "^1.5.7",
+    "tsx": "^4.16.0",
+    "typescript": "^5.4.5"
+  }
+}
