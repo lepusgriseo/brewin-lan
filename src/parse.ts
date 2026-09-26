@@ -9,7 +9,8 @@
 
 import { DeviceType, normaliseTypeId } from "./deviceTypes";
 import { isIpv6, normaliseMac, parseAddress, parseCidr, parseRange } from "./ip";
-import { Assignment, Device, DeviceStatus, Iface, IpRange, PortConfig, Segment } from "./types";
+import { mediumFrom, parsePortList, parseSpeeds } from "./ports";
+import { Assignment, Device, DeviceStatus, Iface, IpRange, PortConfig, PortGroup, Segment } from "./types";
 
 type Fm = Record<string, unknown>;
 
@@ -155,15 +156,42 @@ function portConfigFrom(value: unknown): PortConfig[] {
     const port = asNumber(pick(fm, "port", "interface", "no"));
     if (port === null) continue;
     const mode = (asString(pick(fm, "mode", "type")) ?? "access").toLowerCase() === "trunk" ? "trunk" : "access";
+    const connector = asString(pick(fm, "connector", "socket", "form", "cage"));
+    const speeds = parseSpeeds(pick(fm, "speeds", "speed", "rates"));
     out.push({
       port,
       mode,
       vlan: asNumber(pick(fm, "vlan", "nativevlan", "accessvlan", "vid")),
       allowed: asList(pick(fm, "allowed", "allowedvlans", "tagged")).map((v) => asNumber(v)).filter((n): n is number => n !== null),
       label: asString(pick(fm, "label", "note", "description")),
+      medium: mediumFrom(pick(fm, "medium", "presentation", "physical"), connector, pick(fm, "speeds", "speed")),
+      connector,
+      speeds,
     });
   }
   return out.sort((a, b) => a.port - b.port);
+}
+
+/** The hardware blocks: one entry per range of identical ports. */
+function portGroupsFrom(value: unknown): PortGroup[] {
+  const out: PortGroup[] = [];
+  for (const entry of asList(value)) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const fm = entry as Fm;
+    const ports = parsePortList(pick(fm, "ports", "port", "range"));
+    if (ports.length === 0) continue;
+    const connector = asString(pick(fm, "connector", "socket", "form", "cage"));
+    const poe = pick(fm, "poe", "poweroverethernet");
+    out.push({
+      ports,
+      medium: mediumFrom(pick(fm, "medium", "presentation", "physical"), connector, pick(fm, "speeds", "speed")),
+      connector,
+      speeds: parseSpeeds(pick(fm, "speeds", "speed", "rates")),
+      poe: poe === undefined ? null : !/^(false|no|0|none)$/i.test(String(poe)),
+      label: asString(pick(fm, "label", "note", "description")),
+    });
+  }
+  return out;
 }
 
 export interface NoteInput {
@@ -219,6 +247,7 @@ export function deviceFromNote(note: NoteInput, types: DeviceType[]): Device {
     managed: managedFrom(pick(fm, "managed", "management", "managed?")),
     ports: asNumber(pick(fm, "ports", "port count", "portcount")),
     poePorts: asList(pick(fm, "poe ports", "poeports", "poe")).map((v) => asNumber(v)).filter((n): n is number => n !== null),
+    portGroups: portGroupsFrom(pick(fm, "port groups", "portgroups", "port hardware", "porttypes", "port types")),
     portConfig: portConfigFrom(pick(fm, "port config", "portconfig", "port map", "portmap")),
     services: asList(pick(fm, "services", "service")).map((v) => linkText(v)).filter((s): s is string => s !== null),
     ipv6: asList(pick(fm, "ipv6", "ip6")).map((v) => asString(v)).filter((s): s is string => s !== null),

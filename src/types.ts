@@ -25,8 +25,28 @@ export interface Iface {
   note: string;
 }
 
-/** A port as the switch note configures it. Occupancy is never stored here — it is derived from
- *  which devices say they uplink to this port, so there is only ever one place to edit. */
+/**
+ * The **hardware** of a range of ports: what they are made of and how fast they can go. Written in
+ * ranges because that is how a switch is specified — "1–8 are gigabit RJ45, 12 is a 10G SFP+".
+ */
+export interface PortGroup {
+  /** Expanded from `1-8` / `1,3,5` at parse time. */
+  ports: number[];
+  medium: "copper" | "fibre" | null;
+  /** `rj45`, `sfp+`, `lc`… A cage is a socket, not a medium, so both are kept. */
+  connector: string | null;
+  /** Capable speeds in Mbit/s, ascending. */
+  speeds: number[];
+  poe: boolean | null;
+  label: string | null;
+}
+
+/**
+ * A port as the switch note **configures** it, plus any hardware fact true of this one port alone.
+ *
+ * Occupancy is never stored here — it is derived from which devices say they uplink to this port,
+ * so there is only ever one place to edit.
+ */
 export interface PortConfig {
   port: number;
   mode: "access" | "trunk";
@@ -35,6 +55,10 @@ export interface PortConfig {
   /** Trunk only. Empty means "all". */
   allowed: number[];
   label: string | null;
+  /** Overrides for this one port, when it differs from its group. */
+  medium: "copper" | "fibre" | null;
+  connector: string | null;
+  speeds: number[];
 }
 
 export interface Device {
@@ -68,6 +92,7 @@ export interface Device {
   /** Port count, for anything other devices can plug into. */
   ports: number | null;
   poePorts: number[];
+  portGroups: PortGroup[];
   portConfig: PortConfig[];
   /** Link text of services running on it, for the profile panel. */
   services: string[];

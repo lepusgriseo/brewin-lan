@@ -3,6 +3,7 @@ import { BrewinLanSettings } from "./settings";
 import { deviceFromNote, hasTag, hostnameFrom, NoteInput, pick } from "./parse";
 import { buildNetwork, Network } from "./network";
 import { segmentFromNote } from "./parse";
+import { applyPortConfig, applyPortHardware, portConfigToFrontmatter, portGroupsToFrontmatter, PortHardware, PortSetup } from "./ports";
 import { Device, DeviceStatus, Segment } from "./types";
 
 /** What the "new device" dialog collects. Everything but the name is optional. */
@@ -258,6 +259,39 @@ export class LanStore {
     await this.edit(device.path, (fm) => {
       if (assign) fm.assign = assign;
       else delete fm.assign;
+    });
+  }
+
+  /** Writes back under whichever spelling the note already uses, so a hand-written key survives. */
+  private keyFor(fm: Record<string, unknown>, canonical: string, aliases: string[]): string {
+    return aliases.find((a) => a in fm) ?? canonical;
+  }
+
+  /**
+   * The hardware of some ports: medium, connector, capable speeds, PoE.
+   *
+   * Rewritten as whole blocks rather than edited in place, because "ports 9–11 are 2.5G" has to
+   * behave the same however many groups those ports were previously spread across. The canonical
+   * form that comes back is still what a person would have typed.
+   */
+  async setPortHardware(device: Device, ports: number[], hardware: PortHardware): Promise<void> {
+    const groups = applyPortHardware(device.portGroups, ports, hardware);
+    await this.edit(device.path, (fm) => {
+      const key = this.keyFor(fm, "port_groups", ["port_groups", "portGroups", "port groups", "port types"]);
+      const out = portGroupsToFrontmatter(groups);
+      if (out.length) fm[key] = out;
+      else delete fm[key];
+    });
+  }
+
+  /** The configuration of some ports: access or trunk, which VLAN, a label. */
+  async setPortSetup(device: Device, ports: number[], setup: PortSetup): Promise<void> {
+    const configs = applyPortConfig(device.portConfig, ports, setup);
+    await this.edit(device.path, (fm) => {
+      const key = this.keyFor(fm, "port_config", ["port_config", "portConfig", "port config", "port map"]);
+      const out = portConfigToFrontmatter(configs);
+      if (out.length) fm[key] = out;
+      else delete fm[key];
     });
   }
 

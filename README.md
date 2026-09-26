@@ -15,14 +15,23 @@ Nothing is stored in the plugin. Every note works with it switched off.
 - **Device profiles** — interfaces, segment, assignment, MAC, uplink, services, and for anything with
   ports a **port map** whose occupancy is derived from which devices claim which port, never stored
   twice. Two devices on one port is therefore detectable rather than invisible.
+- **Ports as hardware.** Each port has a presentation (electrical or optical), a connector, capable
+  speeds and PoE, written in ranges the way a switch is actually specified — `ports: 1-8, speeds:
+  10/100/1000, connector: RJ45`. Tap a port to edit it. The payoff is that the *cable* can be
+  checked: optical into electrical is an error no cable fixes, two ports with no speed in common
+  will not come up, and a 2.5G switch on a gigabit port is reported as a gigabit link — the thing
+  people are surprised by. Copper is assumed to fall back down the BASE-T ladder; an optic is taken
+  at its word, because a 10G SFP+ will not talk to a 1G one.
 - **Address map** per segment: every address tagged device / gateway / pool / reserved / free, with
   usage figures and the next free static address. Tap a free one to create a device on it.
 - **Health checks**, split by how much they matter: *errors* are things that cannot both be true (a
   duplicate address or MAC, an address outside its segment, two claims on one port — including a
-  switch's own uplink port — a reused VLAN id, an uplink loop); *warnings* are the documentation
-  arguing with itself (a static address inside the DHCP pool, an uplink pointing at nothing,
-  overlapping subnets, a VLAN configured on a switch marked unmanaged); *gaps* are what is simply
-  not written down yet, and what that costs you.
+  switch's own uplink port — a reused VLAN id, an uplink loop, a link joining optical to electrical
+  or two ports with no speed in common); *warnings* are the documentation arguing with itself (a
+  static address inside the DHCP pool, an uplink pointing at nothing, overlapping subnets, a VLAN
+  configured on a switch marked unmanaged, a port described that the device does not have); *gaps*
+  are what is simply not written down yet, and what that costs you — including a link quietly
+  running slower than either end could.
 - **Exports** — dnsmasq reservations, dnsmasq `host-record` (forward *and* reverse), `/etc/hosts`,
   a Markdown table, CSV. Each says what it left out and why, because a silently missing reservation
   is how a "static" address quietly moves one day.
@@ -108,7 +117,7 @@ Not in the community directory. Either install from this repository with
 npm install
 npm run dev      # watch
 npm run build    # type-check, then bundle
-npm test         # 116 tests
+npm test         # 140 tests
 ```
 
 The addressing, layout, health, export and viewport maths are pure modules with no Obsidian imports,

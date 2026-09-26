@@ -216,3 +216,90 @@ test("an unmanaged switch with no VLAN config is simply an unmanaged switch", ()
   const net = buildNetwork([device("Cheap switch", { device: "l2-switch", managed: false, ports: 8 })], SEGMENTS);
   assert.equal(find(net, "unmanaged-switch-vlans").length, 0);
 });
+
+const CORE = {
+  device: "l2-switch",
+  ports: 12,
+  port_groups: [
+    { ports: "1-8", speeds: "10/100/1000", connector: "RJ45" },
+    { ports: "9-11", speeds: "1/2.5G", connector: "RJ45" },
+    { ports: 12, speeds: "10G", connector: "SFP+" },
+  ],
+};
+
+test("a link is checked end to end once both ports are known", () => {
+  // A 2.5G-capable switch on a gigabit port: the link works, but not at the speed either
+  // datasheet advertises — which is the thing people are surprised by.
+  const net = buildNetwork(
+    [
+      device("Core", CORE),
+      device("Office", { device: "l2-switch", ports: 8, uplink: "[[Core]]", uplink_port: 1, local_port: 8, port_groups: [{ ports: "1-8", speeds: "2.5G", connector: "RJ45" }] }),
+    ],
+    SEGMENTS
+  );
+  const [issue] = find(net, "link-speed-limited");
+  assert.equal(issue.severity, "info");
+  assert.match(issue.message, /runs at 1G — Core port 1 tops out there/);
+});
+
+test("fibre into RJ45 is an error, because no cable fixes it", () => {
+  const net = buildNetwork(
+    [
+      device("Core", CORE),
+      device("Office", { device: "l2-switch", ports: 8, uplink: "[[Core]]", uplink_port: 12, local_port: 1, port_groups: [{ ports: "1-8", speeds: "2.5G", connector: "RJ45" }] }),
+    ],
+    SEGMENTS
+  );
+  const [issue] = find(net, "link-medium-mismatch");
+  assert.equal(issue.severity, "error");
+  assert.match(issue.message, /port 1 is copper but Core port 12 is fibre — that link needs a transceiver/);
+});
+
+test("two optics with no speed in common cannot come up at all", () => {
+  // Copper falls back down the BASE-T ladder, so this is really a fibre problem: a 1G module in
+  // the 10G-only cage on port 12.
+  const net = buildNetwork(
+    [
+      device("Core", CORE),
+      device("Office", { device: "l2-switch", ports: 8, uplink: "[[Core]]", uplink_port: 12, local_port: 1, port_groups: [{ ports: 1, speeds: "1G", connector: "SFP" }] }),
+    ],
+    SEGMENTS
+  );
+  assert.match(find(net, "link-speed-mismatch")[0].message, /have no speed in common, so the link cannot come up/);
+});
+
+test("copper falling back down the ladder is not an incompatibility", () => {
+  // 2.5G switch on the core's gigabit port: fine, and reported only as the speed it will run at.
+  const net = buildNetwork(
+    [
+      device("Core", CORE),
+      device("Office", { device: "l2-switch", ports: 8, uplink: "[[Core]]", uplink_port: 1, local_port: 8, port_groups: [{ ports: "1-8", speeds: "2.5G", connector: "RJ45" }] }),
+    ],
+    SEGMENTS
+  );
+  assert.equal(find(net, "link-speed-mismatch").length, 0);
+  assert.equal(find(net, "link-speed-limited").length, 1);
+});
+
+test("matching ends, and undescribed ends, are both left in peace", () => {
+  const matched = buildNetwork(
+    [
+      device("Core", CORE),
+      device("Office", { device: "l2-switch", ports: 8, uplink: "[[Core]]", uplink_port: 9, local_port: 1, port_groups: [{ ports: "1-8", speeds: "1/2.5G", connector: "RJ45" }] }),
+    ],
+    SEGMENTS
+  );
+  assert.equal(findIssues(matched, OPTS).filter((i) => i.code.startsWith("link-")).length, 0);
+
+  // Most ports are undocumented at first; that must not produce a wall of complaints.
+  const bare = buildNetwork(
+    [device("Core", { device: "l2-switch", ports: 12 }), device("Office", { device: "l2-switch", ports: 8, uplink: "[[Core]]", uplink_port: 9, local_port: 1 })],
+    SEGMENTS
+  );
+  assert.equal(findIssues(bare, OPTS).filter((i) => i.code.startsWith("link-")).length, 0);
+});
+
+test("describing a port the device does not have is worth saying once", () => {
+  const net = buildNetwork([device("Core", { device: "l2-switch", ports: 8, port_groups: [{ ports: "1-12", speeds: "1G" }] })], SEGMENTS);
+  assert.match(find(net, "port-described-not-present")[0].message, /describes ports 9, 10, 11, 12, but has 8 ports/);
+});

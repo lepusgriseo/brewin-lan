@@ -1,6 +1,8 @@
 import { setIcon } from "obsidian";
 import { findType, typeIcon, typeLabel } from "./deviceTypes";
 import { segmentKey, segmentLabel } from "./network";
+import { PortModal } from "./portModal";
+import { describeTally, formatSpeed, formatSpeeds, linkVerdict, portNumbers, portTallies, resolvePort } from "./ports";
 import { buildTopology, INTERNET_ID, LayoutMode, TopoNode, Topology } from "./topology";
 import { ViewContext } from "./viewContext";
 import { beginPinch, fitView, midpoint, pinchMove, PinchStart, pointerDistance, Viewport, zoomStep, zoomTo } from "./viewport";
@@ -97,8 +99,16 @@ export function renderTopology(root: HTMLElement, ctx: ViewContext, state: TopoS
         edge.port !== null ? `port ${edge.port} on ${a.title}` : null,
         edge.toPort !== null ? `port ${edge.toPort} on ${b.title}` : null,
       ].filter(Boolean);
-      tag.setAttr("aria-label", `${ends.join(" ⇄ ")}${edge.trunk ? " (trunk)" : ""}`);
-      tag.setAttr("title", `${ends.join("\n⇄ ")}${edge.trunk ? "\ntrunk" : ""}`);
+      // The speed a link will actually run at is the fastest both ends support, which is not the
+      // number on either datasheet.
+      let speed: string | null = null;
+      if (a.device && b.device && edge.port !== null && edge.toPort !== null) {
+        const verdict = linkVerdict(resolvePort(b.device, edge.toPort), resolvePort(a.device, edge.port));
+        if (verdict.ok && verdict.speed !== null) speed = `runs at ${formatSpeed(verdict.speed)}`;
+        else if (!verdict.ok) speed = verdict.reason === "medium" ? "incompatible: optical to electrical" : "incompatible: no shared speed";
+      }
+      tag.setAttr("aria-label", `${ends.join(" ⇄ ")}${edge.trunk ? " (trunk)" : ""}${speed ? `, ${speed}` : ""}`);
+      tag.setAttr("title", `${ends.join("\n⇄ ")}${edge.trunk ? "\ntrunk" : ""}${speed ? `\n${speed}` : ""}`);
     }
   }
 
@@ -530,7 +540,11 @@ function renderProfile(wrap: HTMLElement, ctx: ViewContext, device: Device): voi
 function renderPortMap(panel: HTMLElement, ctx: ViewContext, device: Device): void {
   const count = device.ports;
   const box = panel.createDiv({ cls: "brewin-lan-ports" });
-  box.createDiv({ cls: "brewin-lan-ports-head", text: count === null ? "Ports (count not recorded)" : `Ports — ${count}` });
+  const head = box.createDiv({ cls: "brewin-lan-ports-head" });
+  head.createSpan({ text: count === null ? "Ports (count not recorded)" : `Ports — ${count}` });
+  // The inventory as a datasheet would put it: "8 × 1G RJ45 · 3 × 1G/2.5G RJ45 · 1 × 10G SFP+".
+  const tallies = portTallies(device).filter((p) => p.speeds.length || p.connector || p.medium);
+  if (tallies.length) head.createSpan({ cls: "brewin-lan-muted", text: ` · ${tallies.map(describeTally).join(" · ")}` });
   const children = ctx.net.devices.filter((d) => (d.uplink ?? "").toLowerCase() === device.title.toLowerCase());
   // Both ends of every link that touches this device: what plugs in, and the port it uses to plug
   // into something else. The second is the half that used to be invisible — a switch's own uplink
@@ -548,28 +562,49 @@ function renderPortMap(panel: HTMLElement, ctx: ViewContext, device: Device): vo
   }
 
   const grid = box.createDiv({ cls: "brewin-lan-port-grid" });
-  const highest = Math.max(count ?? 0, ...[...claimed.keys()], 0);
-  for (let port = 1; port <= highest; port++) {
-    const config = device.portConfig.find((p) => p.port === port);
+  const ports = [...new Set([...portNumbers(device), ...claimed.keys()])].sort((a, b) => a - b);
+  for (const port of ports) {
+    const resolved = resolvePort(device, port);
     const on = claimed.get(port) ?? [];
     const cell = grid.createDiv({ cls: "brewin-lan-port" });
     if (on.length > 1) cell.addClass("is-conflict");
     else if (on.length === 1) cell.addClass("is-used");
-    if (config?.mode === "trunk") cell.addClass("is-trunk");
-    if (device.poePorts.includes(port)) cell.addClass("is-poe");
+    if (resolved.mode === "trunk") cell.addClass("is-trunk");
+    if (resolved.poe) cell.addClass("is-poe");
+    if (resolved.medium === "fibre") cell.addClass("is-fibre");
     if (count !== null && port > count) cell.addClass("is-phantom");
     if (on.some((o) => o.uplink)) cell.addClass("is-uplink");
+
     cell.createSpan({ cls: "brewin-lan-port-no", text: String(port) });
-    cell.createSpan({ cls: "brewin-lan-port-name", text: on.map((d) => d.title).join(" + ") || (config?.label ?? "") });
+    cell.createSpan({ cls: "brewin-lan-port-name", text: on.map((d) => d.title).join(" + ") || resolved.label || "" });
+    // What the port *is*, under what is plugged into it.
+    const spec = [resolved.speeds.length ? formatSpeeds(resolved.speeds) : null, resolved.connector ?? resolved.medium ?? null].filter(Boolean).join(" ");
+    if (spec) cell.createSpan({ cls: "brewin-lan-port-spec", text: spec });
+
     const bits = [
-      config?.mode === "trunk" ? `trunk, native ${config.vlan ?? "?"}${config.allowed.length ? `, allowed ${config.allowed.join("/")}` : ""}` : config?.vlan ? `access VLAN ${config.vlan}` : null,
-      device.poePorts.includes(port) ? "PoE" : null,
+      resolved.mode === "trunk"
+        ? `trunk, native ${resolved.vlan ?? "?"}${resolved.allowed.length ? `, allowed ${resolved.allowed.join("/")}` : ""}`
+        : resolved.vlan
+          ? `access VLAN ${resolved.vlan}`
+          : null,
+      resolved.speeds.length ? `capable of ${formatSpeeds(resolved.speeds)}` : null,
+      resolved.medium ? (resolved.medium === "fibre" ? "optical" : "electrical") : null,
+      resolved.connector,
+      resolved.poe ? "PoE" : null,
       count !== null && port > count ? "beyond the port count" : null,
     ].filter(Boolean);
-    cell.setAttr("title", `Port ${port}${on.length ? ` — ${on.map((d) => d.title).join(", ")}` : " — free"}${bits.length ? `\n${bits.join("\n")}` : ""}`);
-    if (on.length === 1) cell.addEventListener("click", () => ctx.focus(on[0].path));
+    cell.setAttr(
+      "title",
+      `Port ${port}${on.length ? ` — ${on.map((d) => d.title).join(", ")}` : " — free"}${bits.length ? `\n${bits.join("\n")}` : ""}\n\nClick to edit`
+    );
+    cell.addEventListener("click", () => new PortModal(ctx.app, ctx.store, device, port, ctx.refresh).open());
   }
-  if (highest === 0) box.createDiv({ cls: "brewin-lan-muted", text: "Nothing recorded as plugged in, and no port count set." });
+  if (ports.length === 0) {
+    const empty = box.createDiv({ cls: "brewin-lan-muted", text: "No ports recorded. " });
+    empty.createEl("button", { cls: "brewin-lan-chip", text: "Describe them" }).addEventListener("click", () => {
+      new PortModal(ctx.app, ctx.store, device, 1, ctx.refresh).open();
+    });
+  }
 }
 
 /** Keeps the readout honest when the zoom changes by gesture rather than by button. */

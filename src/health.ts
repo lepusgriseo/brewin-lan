@@ -12,6 +12,7 @@
 import { findType, hostsOthers, isManageable, DeviceType } from "./deviceTypes";
 import { cidrsOverlap, inRange, inSubnet, intToIp, ipToInt } from "./ip";
 import { inPool, isReserved, Network, parentLinks, segmentKey, segmentLabel } from "./network";
+import { formatSpeed, formatSpeeds, linkVerdict, resolvePort } from "./ports";
 import { Issue, Segment } from "./types";
 
 export interface HealthOptions {
@@ -173,6 +174,42 @@ export function findIssues(net: Network, opts: HealthOptions): Issue[] {
         }
         claimPort(parent.path, link.port, { title: device.title, path: device.path });
       }
+      // Both ends known? Then the cable itself can be checked — the two most expensive mistakes
+      // here are a medium mismatch (which needs hardware, not a cable) and assuming a link runs at
+      // the faster end's headline speed when it can only run at what both ends support.
+      if (link.port !== null && link.localPort !== null) {
+        const far = resolvePort(parent, link.port);
+        const near = resolvePort(device, link.localPort);
+        const verdict = linkVerdict(near, far);
+        if (!verdict.ok && verdict.reason === "medium") {
+          add(
+            "error",
+            "link-medium-mismatch",
+            `${device.title} port ${link.localPort} is ${near.medium} but ${parent.title} port ${link.port} is ${far.medium} — that link needs a transceiver or a media converter, not a cable.`,
+            device.path,
+            parent.path
+          );
+        } else if (!verdict.ok && verdict.reason === "speed") {
+          add(
+            "error",
+            "link-speed-mismatch",
+            `${device.title} port ${link.localPort} (${formatSpeeds(near.speeds)}) and ${parent.title} port ${link.port} (${formatSpeeds(
+              far.speeds
+            )}) have no speed in common, so the link cannot come up.`,
+            device.path,
+            parent.path
+          );
+        } else if (verdict.ok && verdict.speed !== null && verdict.limitedBy !== null) {
+          const slow = verdict.limitedBy === "near" ? `${device.title} port ${link.localPort}` : `${parent.title} port ${link.port}`;
+          add(
+            "info",
+            "link-speed-limited",
+            `The link between ${device.title} and ${parent.title} runs at ${formatSpeed(verdict.speed)} — ${slow} tops out there, though the other end goes faster.`,
+            device.path,
+            parent.path
+          );
+        }
+      }
       if (link.localPort !== null) {
         if (link.localPort < 1 || (device.ports !== null && link.localPort > device.ports)) {
           add(
@@ -216,6 +253,26 @@ export function findIssues(net: Network, opts: HealthOptions): Issue[] {
     } else if (addressed && device.ifaces.every((i) => i.mac === null)) {
       add("info", "no-mac", `${device.title} has no MAC, so no DHCP reservation can be exported for it.`, device.path);
     }
+  }
+
+  // A port described in the hardware or config blocks that the device does not have.
+  for (const device of devices) {
+    if (device.ports === null) continue;
+    const beyond = [
+      ...new Set([
+        ...device.portGroups.flatMap((g) => g.ports),
+        ...device.portConfig.map((c) => c.port),
+      ]),
+    ]
+      .filter((p) => p < 1 || p > (device.ports as number))
+      .sort((a, b) => a - b);
+    if (beyond.length === 0) continue;
+    add(
+      "warn",
+      "port-described-not-present",
+      `${device.title} describes port${beyond.length === 1 ? "" : "s"} ${beyond.join(", ")}, but has ${device.ports} ports.`,
+      device.path
+    );
   }
 
   // An unmanaged switch cannot tag a frame, so a VLAN written on its ports is a plan that cannot

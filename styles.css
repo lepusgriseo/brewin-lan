@@ -362,7 +362,14 @@ body.theme-dark {
 .brewin-lan-port.is-uplink .brewin-lan-port-name { color: var(--text-accent); }
 .brewin-lan-port.is-phantom { opacity: 0.6; border-style: dotted; }
 .brewin-lan-port.is-poe .brewin-lan-port-no::after { content: " ⚡"; }
+.brewin-lan-port { cursor: pointer; }
+.brewin-lan-port:hover { border-color: var(--text-accent); }
 .brewin-lan-port-no { font-family: var(--font-monospace); color: var(--text-muted); font-size: 0.85em; }
+/* What the port is, under whatever is plugged into it. */
+.brewin-lan-port-spec { font-size: 0.78em; color: var(--text-faint); white-space: nowrap; }
+/* Optical ports read differently at a glance: you cannot put a patch lead in one. */
+.brewin-lan-port.is-fibre { border-style: dashed; }
+.brewin-lan-port.is-fibre .brewin-lan-port-spec { color: var(--brewin-lan-seg-7); }
 .brewin-lan-port-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 110px; }
 
 /* ── Tables ───────────────────────────────────────────────────────────────── */
