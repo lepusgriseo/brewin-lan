@@ -7,7 +7,7 @@
 // MAC is the difference between a reservation and a surprise.
 
 import { compareIps } from "./ip";
-import { Network } from "./network";
+import { linkPorts, Network } from "./network";
 import { Device, Iface } from "./types";
 
 export interface ExportOptions {
@@ -129,7 +129,7 @@ export function markdownTable(net: Network, opts: ExportOptions): ExportResult {
   const lines = ["| Device | Type | Address | Segment | MAC | Port | Status |", "| --- | --- | --- | --- | --- | --- | --- |"];
   for (const { device, iface } of all) {
     const segment = net.placements.find((p) => p.device.path === device.path && p.iface === iface)?.segment;
-    const port = device.uplink && device.uplinkPort !== null ? `${device.uplink}:${device.uplinkPort}` : device.uplink ?? "—";
+    const port = device.uplink ? device.uplink + linkPorts(device) : "—";
     lines.push(
       `| [[${device.title}]] | ${device.type} | ${iface.ip}${iface.prefix !== null ? "/" + iface.prefix : ""} | ${
         segment ? (segment.vlanId === null ? segment.title : `VLAN ${segment.vlanId}`) : "—"
@@ -143,7 +143,7 @@ export function markdownTable(net: Network, opts: ExportOptions): ExportResult {
 export function csvExport(net: Network, opts: ExportOptions): ExportResult {
   const { rows: all, skipped } = rows(net, { ...opts, includePlanned: true });
   const escape = (value: string): string => (/[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value);
-  const lines = ["device,hostname,type,status,interface,ip,prefix,mac,vlan,segment,uplink,uplink_port,location"];
+  const lines = ["device,hostname,type,status,interface,ip,prefix,mac,vlan,segment,uplink,uplink_port,local_port,location"];
   for (const { device, iface } of all) {
     const segment = net.placements.find((p) => p.device.path === device.path && p.iface === iface)?.segment;
     lines.push(
@@ -160,6 +160,7 @@ export function csvExport(net: Network, opts: ExportOptions): ExportResult {
         segment?.title ?? "",
         device.uplink ?? "",
         device.uplinkPort === null ? "" : String(device.uplinkPort),
+        device.localPort === null ? "" : String(device.localPort),
         device.location ?? "",
       ]
         .map((v) => escape(String(v)))

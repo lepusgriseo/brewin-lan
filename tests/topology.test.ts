@@ -122,3 +122,16 @@ test("bounds cover everything drawn", () => {
   const ys = topo.nodes.map((n) => n.y);
   assert.deepEqual(topo.bounds, { minX: Math.min(...xs), minY: Math.min(...ys), maxX: Math.max(...xs), maxY: Math.max(...ys) });
 });
+
+test("an edge carries both ends of the link", () => {
+  const net = buildNetwork(
+    [
+      device("SW1", { device: "l2-switch", ports: 24 }),
+      device("SW2", { device: "l2-switch", ports: 8, uplink: "[[SW1]]", uplink_port: 24, local_port: 1 }),
+    ],
+    SEGMENTS
+  );
+  const [edge] = buildTopology(net, OPTS).edges.filter((e) => e.to.endsWith("SW2.md"));
+  assert.equal(edge.port, 24, "the parent's end");
+  assert.equal(edge.toPort, 1, "the child's own end");
+});

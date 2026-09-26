@@ -73,3 +73,27 @@ test("segment colours cycle through the slots, and a note may override", () => {
   assert.equal(segmentColour(segment("B", { name: "B", colour: "amber" }), 0), "var(--brewin-lan-seg-4)");
   assert.equal(segmentColour(segment("C", { name: "C", colour: "#ff0055" }), 0), "#ff0055");
 });
+
+test("the switch type renamed to L2/L3, and a saved copy of the old one is dropped", () => {
+  // A data.json written before 1.1.0 holds `switch`. Keeping it would leave two competing types and
+  // every `device: switch` note would go on resolving to the dead one instead of aliasing to L2.
+  const saved = {
+    deviceTypes: [
+      { id: "switch", label: "Switch", icon: "network", hosts: true },
+      { id: "laptop", label: "Laptop", icon: "laptop", hosts: false },
+    ],
+  };
+  const types = migrateSettings(saved).deviceTypes;
+  assert.ok(!types.some((t) => t.id === "switch"), "the old type is gone");
+  assert.ok(types.some((t) => t.id === "l2-switch"));
+  assert.ok(types.some((t) => t.id === "l3-switch"));
+  // A type the user actually edited is still theirs.
+  assert.equal(types.find((t) => t.id === "laptop")?.label, "Laptop");
+});
+
+test("a custom type of the user's own is never mistaken for the renamed one", () => {
+  const saved = { deviceTypes: [{ id: "kvm-switch", label: "KVM switch", icon: "monitor", hosts: false }] };
+  const types = migrateSettings(saved).deviceTypes;
+  assert.ok(types.some((t) => t.id === "kvm-switch"));
+  assert.ok(types.some((t) => t.id === "l2-switch"));
+});

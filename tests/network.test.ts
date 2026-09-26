@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { buildNetwork, devicesOn, nextFreeIn, parentLinks, resolveDevice, segmentLabel, unplaced, usedIn } from "../src/network";
+import { buildNetwork, devicesOn, linkPorts, nextFreeIn, parentLinks, resolveDevice, segmentLabel, unplaced, usedIn } from "../src/network";
 import { DEVICES, NET, SEGMENTS, device, segment } from "./fixtures";
 
 test("addresses land in the right segment by longest-prefix match", () => {
@@ -93,4 +93,12 @@ test("addresses no segment explains are listed on their own", () => {
     unplaced(NET).map((p) => p.iface.ip),
     ["10.10.10.1"]
   );
+});
+
+test("link ports read from the device's own point of view", () => {
+  assert.equal(linkPorts({ uplinkPort: 24, localPort: 1 }), ":24⇄1");
+  assert.equal(linkPorts({ uplinkPort: 24, localPort: null }), ":24");
+  assert.equal(linkPorts({ uplinkPort: null, localPort: 1 }), ":?⇄1");
+  // A wireless uplink has no ports at all, and should add nothing to a label.
+  assert.equal(linkPorts({ uplinkPort: null, localPort: null }), "");
 });

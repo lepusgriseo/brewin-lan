@@ -18,10 +18,11 @@ Nothing is stored in the plugin. Every note works with it switched off.
 - **Address map** per segment: every address tagged device / gateway / pool / reserved / free, with
   usage figures and the next free static address. Tap a free one to create a device on it.
 - **Health checks**, split by how much they matter: *errors* are things that cannot both be true (a
-  duplicate address or MAC, an address outside its segment, two devices on one port, a reused VLAN
-  id, an uplink loop); *warnings* are the documentation arguing with itself (a static address inside
-  the DHCP pool, an uplink pointing at nothing, overlapping subnets); *gaps* are what is simply not
-  written down yet, and what that costs you.
+  duplicate address or MAC, an address outside its segment, two claims on one port — including a
+  switch's own uplink port — a reused VLAN id, an uplink loop); *warnings* are the documentation
+  arguing with itself (a static address inside the DHCP pool, an uplink pointing at nothing,
+  overlapping subnets, a VLAN configured on a switch marked unmanaged); *gaps* are what is simply
+  not written down yet, and what that costs you.
 - **Exports** — dnsmasq reservations, dnsmasq `host-record` (forward *and* reverse), `/etc/hosts`,
   a Markdown table, CSV. Each says what it left out and why, because a silently missing reservation
   is how a "static" address quietly moves one day.
@@ -38,20 +39,35 @@ carries an `ip`, `mac` or `device` field.
 ```yaml
 ---
 tags: [Network/Device]
-device: server          # picks the icon, and whether things can plug into it
+device: l2-switch       # picks the icon, and whether things can plug into it
+managed: true           # L2/L3 switches: an unmanaged one cannot carry a VLAN
 status: active          # active | planned | offline | retired
 ip: 192.168.0.51/24     # a list is fine, and so is prose after the address
 mac: 2c:cf:67:5b:70:26  # needed for a DHCP reservation
 vlan: 20                # an explicit tag, which beats matching the address to a subnet
 assign: static          # static | dhcp | reserved
 uplink: "[[SW1]]"       # this is what draws the diagram
-uplink_port: 3
+uplink_port: 3          # the far end: a port on SW1
+local_port: 1           # the near end: a port on this device
 ports: 8                # for anything others plug into
 poe_ports: [1, 2, 3]
 hostname: rasputin
 location: Office
 ---
 ```
+
+**Both ends of a link are recorded.** Knowing a cable lands on SW1's port 24 does not tell you which
+of SW2's own ports it left from — and that port is occupied on SW2 either way, so a switch's uplink
+port used to look free and could be handed to something else. `uplink_port` is theirs, `local_port`
+is ours, and the diagram labels the link `24⇄1`.
+
+**Device types** are `router`, `firewall`, `l2-switch`, `l3-switch`, `ap`, `extender`, `server`,
+`nas`, `sbc`, `vm`, `desktop`, `laptop`, `phone`, `tablet`, `tv`, `console`, `printer`, `camera`,
+`iot` and `other`, each with its own icon, and editable in settings. Written names are folded onto
+them, most specific first: a plain `switch` is an `l2-switch`, "Cisco L3 switch" is an `l3-switch`,
+"managed switch" and "access point" land where you would expect. `managed:` is a property rather
+than a pair of types, because it is one bit of information and not a different kind of thing — and
+it is three-state, since "nobody has said" must not be read as "it cannot do VLANs".
 
 A VLAN or subnet is a note tagged `Network/VLAN`, with `vlan` (omit it for an untagged subnet —
 which is what most home networks are), `cidr`, `gateway`, `dhcp_range`, `reserved`, `colour` and
@@ -92,7 +108,7 @@ Not in the community directory. Either install from this repository with
 npm install
 npm run dev      # watch
 npm run build    # type-check, then bundle
-npm test         # 102 tests
+npm test         # 116 tests
 ```
 
 The addressing, layout, health, export and viewport maths are pure modules with no Obsidian imports,

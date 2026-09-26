@@ -9,7 +9,7 @@
 // The point of the split is that `error` should be empty on a healthy network, so a non-empty
 // error list means something really is broken rather than merely undocumented.
 
-import { findType, hostsOthers, DeviceType } from "./deviceTypes";
+import { findType, hostsOthers, isManageable, DeviceType } from "./deviceTypes";
 import { cidrsOverlap, inRange, inSubnet, intToIp, ipToInt } from "./ip";
 import { inPool, isReserved, Network, parentLinks, segmentKey, segmentLabel } from "./network";
 import { Issue, Segment } from "./types";
@@ -137,7 +137,14 @@ export function findIssues(net: Network, opts: HealthOptions): Issue[] {
   // ── Uplinks and ports ──────────────────────────────────────────────────────
   const devices = net.devices.filter((d) => opts.includeRetired || d.status !== "retired");
   const links = parentLinks(devices);
+  // Keyed by "<device path>#<port>". Both ends of every link are recorded here, because a port is
+  // occupied whether the cable arrives or leaves: a switch's own uplink port is not free for a
+  // laptop just because the switch is the one that named it.
   const portClaims = new Map<string, { title: string; path: string }[]>();
+  const claimPort = (ownerPath: string, port: number, claim: { title: string; path: string }): void => {
+    const key = `${ownerPath}#${port}`;
+    portClaims.set(key, [...(portClaims.get(key) ?? []), claim]);
+  };
 
   for (const link of links) {
     const { device, parent } = link;
@@ -164,11 +171,24 @@ export function findIssues(net: Network, opts: HealthOptions): Issue[] {
         if (link.port < 1 || (parent.ports !== null && link.port > parent.ports)) {
           add("warn", "port-out-of-range", `${device.title} claims port ${link.port} on ${parent.title}, which has ${parent.ports ?? "an unknown number of"} ports.`, device.path, parent.path);
         }
-        const key = `${parent.path}#${link.port}`;
-        portClaims.set(key, [...(portClaims.get(key) ?? []), { title: device.title, path: device.path }]);
+        claimPort(parent.path, link.port, { title: device.title, path: device.path });
+      }
+      if (link.localPort !== null) {
+        if (link.localPort < 1 || (device.ports !== null && link.localPort > device.ports)) {
+          add(
+            "warn",
+            "local-port-out-of-range",
+            `${device.title} uses its own port ${link.localPort} for the link to ${parent.title}, but it has ${device.ports ?? "an unknown number of"} ports.`,
+            device.path
+          );
+        }
+        claimPort(device.path, link.localPort, { title: `the uplink to ${parent.title}`, path: device.path });
       }
     } else if (!link.detached && link.cutParent === null && !hostsOthers(device.type, opts.types) && device.status === "active") {
       add("info", "no-uplink", `${device.title} has no uplink, so the diagram can only draw it on its own.`, device.path);
+    }
+    if (link.localPort !== null && device.uplink === null) {
+      add("warn", "local-port-without-uplink", `${device.title} records its own port ${link.localPort} as used by a link, but names no uplink.`, device.path);
     }
     if (!opts.types.some((t) => t.id === device.type)) {
       add("warn", "unknown-type", `${device.title} has device type "${device.type}", which isn't one of the configured types.`, device.path);
@@ -178,11 +198,11 @@ export function findIssues(net: Network, opts: HealthOptions): Issue[] {
   for (const [key, claimants] of [...portClaims].sort((a, b) => a[0].localeCompare(b[0]))) {
     if (claimants.length < 2) continue;
     const [path, port] = key.split("#");
-    const parent = net.byPath.get(path);
+    const owner = net.byPath.get(path);
     add(
       "error",
       "port-conflict",
-      `Port ${port} on ${parent?.title ?? path} is claimed by ${claimants.length} devices: ${claimants.map((c) => c.title).join(", ")}.`,
+      `Port ${port} on ${owner?.title ?? path} has ${claimants.length} claims: ${claimants.map((c) => c.title).join(", ")}.`,
       claimants[0].path,
       claimants[1].path
     );
@@ -196,6 +216,23 @@ export function findIssues(net: Network, opts: HealthOptions): Issue[] {
     } else if (addressed && device.ifaces.every((i) => i.mac === null)) {
       add("info", "no-mac", `${device.title} has no MAC, so no DHCP reservation can be exported for it.`, device.path);
     }
+  }
+
+  // An unmanaged switch cannot tag a frame, so a VLAN written on its ports is a plan that cannot
+  // work — worth saying while it is still a plan. Only when the note actually says "unmanaged":
+  // silence is not the same claim.
+  for (const device of devices) {
+    if (device.managed !== false || !isManageable(device.type, opts.types)) continue;
+    const tagged = device.portConfig.filter((p) => p.mode === "trunk" || p.vlan !== null);
+    if (tagged.length === 0) continue;
+    add(
+      "warn",
+      "unmanaged-switch-vlans",
+      `${device.title} is unmanaged, so it cannot tag a frame, but ${tagged.length} of its ports ${
+        tagged.length === 1 ? "is" : "are"
+      } configured with a VLAN.`,
+      device.path
+    );
   }
 
   // Unclaimed gateways come last: useful, but never urgent.

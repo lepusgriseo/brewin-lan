@@ -1,7 +1,7 @@
 import { setIcon } from "obsidian";
 import { typeIcon, typeLabel } from "./deviceTypes";
 import { compareIps } from "./ip";
-import { segmentKey, segmentLabel } from "./network";
+import { linkPorts, segmentKey, segmentLabel } from "./network";
 import { ViewContext } from "./viewContext";
 import { Device } from "./types";
 
@@ -90,7 +90,12 @@ export function renderDevices(root: HTMLElement, ctx: ViewContext, filters: Devi
       locate.setAttr("title", "Show on the diagram");
       locate.addEventListener("click", () => ctx.focus(device.path));
 
-      tr.createEl("td", { text: typeLabel(device.type, ctx.settings.deviceTypes) });
+      const typeCell = tr.createEl("td");
+      typeCell.createSpan({ text: typeLabel(device.type, ctx.settings.deviceTypes) });
+      // Only shown when the note says so: "not recorded" must not read as "unmanaged".
+      if (device.managed !== null) {
+        typeCell.createSpan({ cls: "brewin-lan-muted", text: device.managed ? " · managed" : " · unmanaged" });
+      }
 
       const addressCell = tr.createEl("td", { cls: "brewin-lan-mono" });
       const addressed = device.ifaces.filter((i) => i.ip !== null);
@@ -115,7 +120,7 @@ export function renderDevices(root: HTMLElement, ctx: ViewContext, filters: Devi
       const uplinkCell = tr.createEl("td");
       if (device.uplink) {
         const parent = ctx.net.devices.find((d) => d.title.toLowerCase() === (device.uplink ?? "").toLowerCase());
-        const text = device.uplink + (device.uplinkPort !== null ? `:${device.uplinkPort}` : "");
+        const text = device.uplink + linkPorts(device);
         if (parent) {
           const up = uplinkCell.createSpan({ cls: "brewin-lan-link", text });
           up.addEventListener("click", () => ctx.focus(parent.path));

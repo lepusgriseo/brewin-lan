@@ -50,8 +50,21 @@ export interface Device {
   ifaces: Iface[];
   /** Raw link text of the device this one plugs into — resolved against titles later. */
   uplink: string | null;
-  /** Port number on the uplink device. */
+  /**
+   * The **far** end of that link: which port on the uplink device.
+   *
+   * Two ports are recorded because a link has two ends, and a switch-to-switch link needs both to
+   * be traceable — knowing a cable lands on SW1's port 24 does not tell you which of SW2's own
+   * ports it left from, and that port is occupied on SW2 either way.
+   */
   uplinkPort: number | null;
+  /** The **near** end: which port on *this* device the link uses. */
+  localPort: number | null;
+  /**
+   * Managed, unmanaged, or not recorded. Null is deliberately distinct from `false`: "nobody has
+   * said" must not be read as "it cannot do VLANs", or the health check invents faults.
+   */
+  managed: boolean | null;
   /** Port count, for anything other devices can plug into. */
   ports: number | null;
   poePorts: number[];

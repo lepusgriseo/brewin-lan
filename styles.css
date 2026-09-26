@@ -357,6 +357,9 @@ body.theme-dark {
 .brewin-lan-port.is-used { border-color: var(--color-green); cursor: pointer; }
 .brewin-lan-port.is-conflict { border-color: var(--text-error); background: rgba(220, 70, 60, 0.1); }
 .brewin-lan-port.is-trunk { border-style: double; border-width: 3px; }
+/* The port this device uses to reach its own uplink: occupied, but by the link going out. */
+.brewin-lan-port.is-uplink { border-color: var(--text-accent); background: var(--background-modifier-hover); }
+.brewin-lan-port.is-uplink .brewin-lan-port-name { color: var(--text-accent); }
 .brewin-lan-port.is-phantom { opacity: 0.6; border-style: dotted; }
 .brewin-lan-port.is-poe .brewin-lan-port-no::after { content: " ⚡"; }
 .brewin-lan-port-no { font-family: var(--font-monospace); color: var(--text-muted); font-size: 0.85em; }

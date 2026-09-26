@@ -124,7 +124,7 @@ test("two devices on one switch port is an error", () => {
   );
   const [issue] = find(net, "port-conflict");
   assert.equal(issue.severity, "error");
-  assert.match(issue.message, /Port 3 on SW1 is claimed by 2 devices: A, B/);
+  assert.match(issue.message, /Port 3 on SW1 has 2 claims: A, B/);
 });
 
 test("an unknown device type is reported rather than quietly relabelled", () => {
@@ -160,4 +160,59 @@ test("errors sort above warnings above information", () => {
   const severities = findIssues(net, OPTS).map((i) => i.severity);
   const rank = { error: 0, warn: 1, info: 2 } as const;
   assert.deepEqual(severities, [...severities].sort((a, b) => rank[a] - rank[b]));
+});
+
+test("a device's own uplink port is occupied on it, not just on the far end", () => {
+  // SW2 plugs into SW1 port 24 using its own port 1 — so SW2's port 1 is taken, and a laptop
+  // claiming it is a conflict. This was invisible before both ends were recorded.
+  const net = buildNetwork(
+    [
+      device("SW1", { device: "l2-switch", ports: 24 }),
+      device("SW2", { device: "l2-switch", ports: 8, uplink: "[[SW1]]", uplink_port: 24, local_port: 1 }),
+      device("Laptop", { device: "laptop", uplink: "[[SW2]]", uplink_port: 1 }),
+    ],
+    SEGMENTS
+  );
+  const [issue] = find(net, "port-conflict");
+  assert.equal(issue.severity, "error");
+  assert.match(issue.message, /Port 1 on SW2 has 2 claims: the uplink to SW1, Laptop/);
+  // The far end is fine: nothing else claims SW1's port 24.
+  assert.equal(find(net, "port-conflict").length, 1);
+});
+
+test("a local port beyond the device's own port count is reported against that device", () => {
+  const net = buildNetwork(
+    [device("SW1", { device: "l2-switch", ports: 24 }), device("SW2", { device: "l2-switch", ports: 5, uplink: "[[SW1]]", uplink_port: 24, local_port: 9 })],
+    SEGMENTS
+  );
+  const [issue] = find(net, "local-port-out-of-range");
+  assert.match(issue.message, /SW2 uses its own port 9 for the link to SW1, but it has 5 ports/);
+  assert.ok(issue.path?.endsWith("SW2.md"), "reported against SW2, not the far end");
+});
+
+test("a local port with nothing to connect to is a leftover", () => {
+  const net = buildNetwork([device("SW2", { device: "l2-switch", ports: 8, local_port: 1 })], SEGMENTS);
+  assert.match(find(net, "local-port-without-uplink")[0].message, /records its own port 1 as used by a link, but names no uplink/);
+});
+
+test("an unmanaged switch cannot carry the VLANs its ports claim", () => {
+  const unmanaged = device("Cheap switch", {
+    device: "l2-switch",
+    managed: false,
+    ports: 8,
+    port_config: [{ port: 1, mode: "trunk", vlan: 1, allowed: [1, 20] }, { port: 2, mode: "access", vlan: 20 }],
+  });
+  const [issue] = find(buildNetwork([unmanaged], SEGMENTS), "unmanaged-switch-vlans");
+  assert.equal(issue.severity, "warn");
+  assert.match(issue.message, /is unmanaged, so it cannot tag a frame, but 2 of its ports are configured with a VLAN/);
+
+  // Managed: no complaint. Not recorded: also no complaint — silence is not a claim.
+  const managed = device("Smart switch", { device: "l2-switch", managed: true, ports: 8, port_config: [{ port: 1, mode: "trunk", vlan: 1 }] });
+  const unknown = device("Some switch", { device: "l2-switch", ports: 8, port_config: [{ port: 1, mode: "trunk", vlan: 1 }] });
+  assert.equal(find(buildNetwork([managed, unknown], SEGMENTS), "unmanaged-switch-vlans").length, 0);
+});
+
+test("an unmanaged switch with no VLAN config is simply an unmanaged switch", () => {
+  const net = buildNetwork([device("Cheap switch", { device: "l2-switch", managed: false, ports: 8 })], SEGMENTS);
+  assert.equal(find(net, "unmanaged-switch-vlans").length, 0);
 });

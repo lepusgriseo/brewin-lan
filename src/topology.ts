@@ -39,8 +39,10 @@ export interface TopoEdge {
   /** The uplink (parent) end. */
   from: string;
   to: string;
-  /** Port on the parent, when the child names one. */
+  /** Port at the parent's end of the link, when the child names one. */
   port: number | null;
+  /** Port at the child's own end. */
+  toPort: number | null;
   /** The parent's port config calls this port a trunk. */
   trunk: boolean;
   /** This link closed a loop and was broken to lay the diagram out. */
@@ -126,7 +128,7 @@ export function buildTopology(net: Network, opts: LayoutOptions): Topology {
   // A cut link is still drawn — dashed, and labelled a loop — because hiding it would hide the bug.
   const cycles: TopoEdge[] = rows
     .filter((r) => r.cutParent !== null)
-    .map((r) => ({ from: r.cutParent as string, to: r.device.path, port: r.port, trunk: false, cycle: true }));
+    .map((r) => ({ from: r.cutParent as string, to: r.device.path, port: r.port, toPort: r.localPort, trunk: false, cycle: true }));
 
   const node = (device: Device, depth: number, x: number, y: number): TopoNode => ({
     id: device.path,
@@ -146,7 +148,7 @@ export function buildTopology(net: Network, opts: LayoutOptions): Topology {
   for (const row of rows) {
     if (!row.parent) continue;
     const trunk = row.port !== null && row.parent.portConfig.some((p) => p.port === row.port && p.mode === "trunk");
-    edges.push({ from: row.parent.path, to: row.device.path, port: row.port, trunk, cycle: false });
+    edges.push({ from: row.parent.path, to: row.device.path, port: row.port, toPort: row.localPort, trunk, cycle: false });
   }
   edges.push(...cycles);
 
@@ -246,7 +248,7 @@ export function buildTopology(net: Network, opts: LayoutOptions): Topology {
       detached: false,
       device: null,
     });
-    for (const gateway of gateways) edges.push({ from: INTERNET_ID, to: gateway.path, port: null, trunk: false, cycle: false });
+    for (const gateway of gateways) edges.push({ from: INTERNET_ID, to: gateway.path, port: null, toPort: null, trunk: false, cycle: false });
   }
 
   // Drawn parents before children, which is also a sensible tab order.

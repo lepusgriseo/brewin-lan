@@ -1,5 +1,5 @@
 import { App, Modal, Notice, Setting } from "obsidian";
-import { DeviceType } from "./deviceTypes";
+import { DeviceType, isManageable } from "./deviceTypes";
 import { normaliseMac, parseAddress } from "./ip";
 import { nextFreeIn, Network, segmentKey, segmentLabel } from "./network";
 import { LanStore, NewDeviceFields } from "./lanStore";
@@ -43,7 +43,9 @@ export class DeviceModal extends Modal {
       assign: iface?.assign && iface.assign !== "unknown" ? iface.assign : "",
       uplink: editing?.uplink ?? null,
       uplinkPort: editing?.uplinkPort ?? null,
+      localPort: editing?.localPort ?? null,
       ports: editing?.ports ?? null,
+      managed: editing?.managed ?? null,
       location: editing?.location ?? "",
     };
   }
@@ -60,9 +62,12 @@ export class DeviceModal extends Modal {
     }
 
     let portsSetting: Setting | null = null;
+    let managedSetting: Setting | null = null;
     const syncPorts = (): void => {
       const hosts = this.types.find((t) => t.id === this.fields.type)?.hosts ?? false;
       portsSetting?.settingEl.toggleClass("brewin-lan-hidden", !hosts);
+      // "Managed?" is only a question for the kinds of device where it changes what they can do.
+      managedSetting?.settingEl.toggleClass("brewin-lan-hidden", !isManageable(this.fields.type, this.types));
     };
 
     new Setting(contentEl).setName("Type").addDropdown((d) => {
@@ -71,9 +76,22 @@ export class DeviceModal extends Modal {
         this.fields.type = v;
         const type = this.types.find((t) => t.id === v);
         if (type?.defaultPorts && this.fields.ports === null) this.fields.ports = type.defaultPorts;
+        if (!isManageable(v, this.types)) this.fields.managed = null;
         syncPorts();
       });
     });
+
+    managedSetting = new Setting(contentEl)
+      .setName("Managed?")
+      .setDesc("An unmanaged switch cannot tag a frame, so it cannot carry a VLAN — which is worth knowing before planning one.")
+      .addDropdown((d) =>
+        d
+          .addOption("", "— not recorded —")
+          .addOption("true", "Managed (web UI, CLI or SNMP)")
+          .addOption("false", "Unmanaged")
+          .setValue(this.fields.managed === null ? "" : String(this.fields.managed))
+          .onChange((v) => (this.fields.managed = v === "" ? null : v === "true"))
+      );
 
     new Setting(contentEl).setName("Status").addDropdown((d) => {
       STATUSES.forEach((s) => d.addOption(s, s));
@@ -147,21 +165,49 @@ export class DeviceModal extends Modal {
       .addText((t) => t.setPlaceholder("2c:cf:67:5b:70:26").setValue(this.fields.mac).onChange((v) => (this.fields.mac = v.trim())));
 
     // ── Where it plugs in ────────────────────────────────────────────────────
+    //
+    // A link has two ends and both are worth recording: the port it lands on at the far end, and
+    // the port it leaves from here. Tracing a cable needs both, and the near port is occupied on
+    // this device whether or not anything else knows about it.
     const hostsList = this.net.devices.filter((d) => this.types.find((t) => t.id === d.type)?.hosts && d.path !== this.editing?.path);
+    let portsRow: Setting | null = null;
+    const describePorts = (): void => {
+      const uplink = this.fields.uplink;
+      portsRow?.setName(uplink ? `Ports on the link to ${uplink}` : "Ports on the link");
+      portsRow?.setDesc(
+        uplink
+          ? `Which port at ${uplink}'s end, and which port at this device's end. Leave either blank if it is wireless or unknown.`
+          : "Pick an uplink first."
+      );
+      portsRow?.settingEl.toggleClass("brewin-lan-hidden", !uplink);
+    };
+
     new Setting(contentEl)
       .setName("Uplink")
       .setDesc("The switch, router or AP it connects to — this is what draws the topology.")
       .addDropdown((d) => {
         d.addOption("", "— none —");
         hostsList.forEach((h) => d.addOption(h.title, h.title));
-        d.setValue(this.fields.uplink ?? "").onChange((v) => (this.fields.uplink = v || null));
-      })
+        d.setValue(this.fields.uplink ?? "").onChange((v) => {
+          this.fields.uplink = v || null;
+          describePorts();
+        });
+      });
+
+    portsRow = new Setting(contentEl)
       .addText((t) =>
         t
-          .setPlaceholder("port")
+          .setPlaceholder("their port")
           .setValue(this.fields.uplinkPort === null ? "" : String(this.fields.uplinkPort))
           .onChange((v) => (this.fields.uplinkPort = v.trim() === "" ? null : Number(v) || null))
+      )
+      .addText((t) =>
+        t
+          .setPlaceholder("our port")
+          .setValue(this.fields.localPort === null ? "" : String(this.fields.localPort))
+          .onChange((v) => (this.fields.localPort = v.trim() === "" ? null : Number(v) || null))
       );
+    describePorts();
 
     portsSetting = new Setting(contentEl)
       .setName("Ports on this device")
@@ -212,7 +258,8 @@ export class DeviceModal extends Modal {
       await this.store.setMac(device, normaliseMac(this.fields.mac) ?? "");
       await this.store.setVlan(device, this.fields.vlan);
       await this.store.setAssignment(device, this.fields.assign);
-      await this.store.setUplink(device, this.fields.uplink, this.fields.uplinkPort);
+      await this.store.setUplink(device, this.fields.uplink, this.fields.uplinkPort, this.fields.localPort);
+      await this.store.setManaged(device, this.fields.managed);
       new Notice(`${device.title} updated.`);
     } else {
       const parsed = this.fields.ip ? parseAddress(this.fields.ip) : null;

@@ -16,8 +16,13 @@ export interface NewDeviceFields {
   vlan: number | null;
   assign: string;
   uplink: string | null;
+  /** Port at the uplink's end. */
   uplinkPort: number | null;
+  /** Port at this device's own end. */
+  localPort: number | null;
   ports: number | null;
+  /** Managed / unmanaged / not recorded — only meaningful for the switch-shaped types. */
+  managed: boolean | null;
   location: string;
 }
 
@@ -147,7 +152,9 @@ export class LanStore {
     if (fields.assign) lines.push(`assign: ${fields.assign}`);
     if (fields.uplink) lines.push(`uplink: "[[${fields.uplink}]]"`);
     if (fields.uplinkPort !== null) lines.push(`uplink_port: ${fields.uplinkPort}`);
+    if (fields.localPort !== null) lines.push(`local_port: ${fields.localPort}`);
     if (fields.ports !== null) lines.push(`ports: ${fields.ports}`);
+    if (fields.managed !== null) lines.push(`managed: ${fields.managed}`);
     if (fields.location) lines.push(`location: ${fields.location}`);
     lines.push(`created: ${this.today()}`, `modified: ${this.today()}`, "---", "", `# ${fields.title}`, "", "## Notes", "");
     return this.app.vault.create(path, lines.join("\n"));
@@ -203,22 +210,33 @@ export class LanStore {
     });
   }
 
-  async setUplink(device: Device, uplinkTitle: string | null, port: number | null): Promise<void> {
+  /** Both ends of the link at once: `uplink_port` is theirs, `local_port` is ours. */
+  async setUplink(device: Device, uplinkTitle: string | null, port: number | null, localPort: number | null = null): Promise<void> {
     await this.edit(device.path, (fm) => {
       if (uplinkTitle === null) {
         delete fm.uplink;
         delete fm.uplink_port;
+        delete fm.local_port;
         return;
       }
       fm.uplink = `[[${uplinkTitle}]]`;
       if (port === null) delete fm.uplink_port;
       else fm.uplink_port = port;
+      if (localPort === null) delete fm.local_port;
+      else fm.local_port = localPort;
     });
   }
 
   async setStatus(device: Device, status: DeviceStatus): Promise<void> {
     await this.edit(device.path, (fm) => {
       fm.status = status;
+    });
+  }
+
+  async setManaged(device: Device, managed: boolean | null): Promise<void> {
+    await this.edit(device.path, (fm) => {
+      if (managed === null) delete fm.managed;
+      else fm.managed = managed;
     });
   }
 

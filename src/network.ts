@@ -141,7 +141,10 @@ export interface ParentLink {
   detached: boolean;
   /** The parent this link originally named, when it had to be cut to break a loop. */
   cutParent: string | null;
+  /** Port at the parent's end. */
   port: number | null;
+  /** Port at this device's own end. */
+  localPort: number | null;
 }
 
 /**
@@ -164,6 +167,7 @@ export function parentLinks(devices: Device[]): ParentLink[] {
       // A device naming itself is its own kind of loop, and the only one worth calling out here.
       cutParent: target && target.path === device.path ? device.path : null,
       port: device.uplinkPort,
+      localPort: device.localPort,
     };
   });
   const parentOf = new Map(rows.map((r) => [r.device.path, r.parent?.path ?? null]));
@@ -184,6 +188,17 @@ export function parentLinks(devices: Device[]): ParentLink[] {
     }
   }
   return rows;
+}
+
+/**
+ * The ports of a device's uplink, from its own point of view: `:24⇄1` reads "lands on their port 24,
+ * leaves our port 1". Either half may be unrecorded — a wireless uplink has no ports at all.
+ */
+export function linkPorts(device: { uplinkPort: number | null; localPort: number | null }): string {
+  if (device.uplinkPort === null && device.localPort === null) return "";
+  if (device.localPort === null) return `:${device.uplinkPort}`;
+  if (device.uplinkPort === null) return `:?⇄${device.localPort}`;
+  return `:${device.uplinkPort}⇄${device.localPort}`;
 }
 
 /** Addresses with no segment at all — the ones a new segment note would explain. */

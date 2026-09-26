@@ -85,13 +85,20 @@ export function renderTopology(root: HTMLElement, ctx: ViewContext, state: TopoS
     if (b.segment) line.style.stroke = ctx.colourOf(b.segment);
     svg.appendChild(line);
 
-    if (edge.port !== null) {
-      const tag = world.createDiv({ cls: "brewin-lan-port-tag", text: String(edge.port) });
+    if (edge.port !== null || edge.toPort !== null) {
+      // Both ends when both are known — `24⇄1` reads "their port 24, our port 1".
+      const label = edge.port !== null && edge.toPort !== null ? `${edge.port}⇄${edge.toPort}` : String(edge.port ?? edge.toPort);
+      const tag = world.createDiv({ cls: "brewin-lan-port-tag", text: label });
       // Two-thirds of the way along, so a switch with eight children doesn't stack its labels.
       tag.style.left = `${a.x + (b.x - a.x) * 0.72}px`;
       tag.style.top = `${a.y + (b.y - a.y) * 0.72}px`;
       if (edge.trunk) tag.addClass("is-trunk");
-      tag.setAttr("aria-label", `Port ${edge.port} on ${a.title}${edge.trunk ? " (trunk)" : ""}`);
+      const ends = [
+        edge.port !== null ? `port ${edge.port} on ${a.title}` : null,
+        edge.toPort !== null ? `port ${edge.toPort} on ${b.title}` : null,
+      ].filter(Boolean);
+      tag.setAttr("aria-label", `${ends.join(" ⇄ ")}${edge.trunk ? " (trunk)" : ""}`);
+      tag.setAttr("title", `${ends.join("\n⇄ ")}${edge.trunk ? "\ntrunk" : ""}`);
     }
   }
 
@@ -439,7 +446,14 @@ function renderProfile(wrap: HTMLElement, ctx: ViewContext, device: Device): voi
   titleRow.createSpan({ cls: `brewin-lan-status is-${device.status}`, text: device.status });
   heading.createDiv({
     cls: "brewin-lan-profile-sub",
-    text: [typeLabel(device.type, ctx.settings.deviceTypes), device.hostname, device.location].filter(Boolean).join(" · "),
+    text: [
+      typeLabel(device.type, ctx.settings.deviceTypes),
+      device.managed === null ? null : device.managed ? "managed" : "unmanaged",
+      device.hostname,
+      device.location,
+    ]
+      .filter(Boolean)
+      .join(" · "),
   });
   head.createEl("button", { cls: "brewin-lan-icon-btn", text: "↗" }).addEventListener("click", () => ctx.open(device.path));
 
@@ -475,8 +489,15 @@ function renderProfile(wrap: HTMLElement, ctx: ViewContext, device: Device): voi
   const uplinkRow = links.createDiv({ cls: "brewin-lan-kv" });
   uplinkRow.createSpan({ cls: "brewin-lan-k", text: "Uplink" });
   if (parent) {
-    const link = uplinkRow.createSpan({ cls: "brewin-lan-link", text: parent.title + (device.uplinkPort !== null ? ` · port ${device.uplinkPort}` : "") });
+    const link = uplinkRow.createSpan({ cls: "brewin-lan-link", text: parent.title });
     link.addEventListener("click", () => ctx.focus(parent.path));
+    // Named rather than abbreviated here, because this is the one place with room to be plain
+    // about which end is which.
+    const ends = [
+      device.uplinkPort !== null ? `port ${device.uplinkPort} on ${parent.title}` : null,
+      device.localPort !== null ? `port ${device.localPort} here` : null,
+    ].filter(Boolean);
+    if (ends.length) uplinkRow.createSpan({ cls: "brewin-lan-muted", text: ` · ${ends.join(" ⇄ ")}` });
   } else {
     uplinkRow.createSpan({ cls: "brewin-lan-muted", text: device.uplink ? `${device.uplink} — no such device` : "none" });
   }
@@ -511,10 +532,19 @@ function renderPortMap(panel: HTMLElement, ctx: ViewContext, device: Device): vo
   const box = panel.createDiv({ cls: "brewin-lan-ports" });
   box.createDiv({ cls: "brewin-lan-ports-head", text: count === null ? "Ports (count not recorded)" : `Ports — ${count}` });
   const children = ctx.net.devices.filter((d) => (d.uplink ?? "").toLowerCase() === device.title.toLowerCase());
-  const claimed = new Map<number, Device[]>();
+  // Both ends of every link that touches this device: what plugs in, and the port it uses to plug
+  // into something else. The second is the half that used to be invisible — a switch's own uplink
+  // port looked free, and the address map would happily offer it to a laptop.
+  const claimed = new Map<number, { title: string; path: string; uplink: boolean }[]>();
+  const claim = (port: number, entry: { title: string; path: string; uplink: boolean }): void =>
+    void claimed.set(port, [...(claimed.get(port) ?? []), entry]);
   for (const child of children) {
     if (child.uplinkPort === null) continue;
-    claimed.set(child.uplinkPort, [...(claimed.get(child.uplinkPort) ?? []), child]);
+    claim(child.uplinkPort, { title: child.title, path: child.path, uplink: false });
+  }
+  if (device.localPort !== null && device.uplink) {
+    const parent = ctx.net.devices.find((d) => d.title.toLowerCase() === (device.uplink ?? "").toLowerCase());
+    claim(device.localPort, { title: `↑ ${device.uplink}`, path: parent?.path ?? device.path, uplink: true });
   }
 
   const grid = box.createDiv({ cls: "brewin-lan-port-grid" });
@@ -528,6 +558,7 @@ function renderPortMap(panel: HTMLElement, ctx: ViewContext, device: Device): vo
     if (config?.mode === "trunk") cell.addClass("is-trunk");
     if (device.poePorts.includes(port)) cell.addClass("is-poe");
     if (count !== null && port > count) cell.addClass("is-phantom");
+    if (on.some((o) => o.uplink)) cell.addClass("is-uplink");
     cell.createSpan({ cls: "brewin-lan-port-no", text: String(port) });
     cell.createSpan({ cls: "brewin-lan-port-name", text: on.map((d) => d.title).join(" + ") || (config?.label ?? "") });
     const bits = [

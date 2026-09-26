@@ -78,6 +78,11 @@ export function migrateSettings(raw: unknown): BrewinLanSettings {
       defaultPorts: typeof type.defaultPorts === "number" ? type.defaultPorts : undefined,
     });
   }
+  // `switch` became `l2-switch` and `l3-switch` in 1.1.0. A saved copy of the old type would
+  // otherwise sit in the list forever and keep claiming every `device: switch` note, so it is
+  // dropped once the replacements exist — the alias on `l2-switch` then resolves those notes.
+  if (byId.has("switch") && DEFAULT_DEVICE_TYPES.some((t) => t.id === "l2-switch")) byId.delete("switch");
+
   const merged = [...byId.values()];
   for (const fallback of DEFAULT_DEVICE_TYPES) {
     if (!byId.has(fallback.id)) merged.push({ ...fallback });

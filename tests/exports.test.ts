@@ -76,7 +76,7 @@ test("CSV quotes what needs quoting and keeps a stable column order", () => {
   const net = buildNetwork([device("Study, back room", { device: "iot", ip: "192.168.0.88/24", location: "Study" })], SEGMENTS);
   const out = csvExport(net, OPTS);
   const [header, row] = out.text.trim().split("\n");
-  assert.equal(header, "device,hostname,type,status,interface,ip,prefix,mac,vlan,segment,uplink,uplink_port,location");
+  assert.equal(header, "device,hostname,type,status,interface,ip,prefix,mac,vlan,segment,uplink,uplink_port,local_port,location");
   assert.ok(row.startsWith('"Study, back room",study-back-room,iot,active,primary,192.168.0.88,24,'));
 });
 

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { DEFAULT_DEVICE_TYPES, normaliseTypeId } from "../src/deviceTypes";
+import { DEFAULT_DEVICE_TYPES, isManageable, normaliseTypeId } from "../src/deviceTypes";
 import { deviceFromNote, hasTag, hostnameFrom, linkText, NoteInput, parseIfaceEntry, segmentFromNote } from "../src/parse";
 
 const T = DEFAULT_DEVICE_TYPES;
@@ -129,9 +129,14 @@ test("frontmatter keys are matched loosely, because notes are written by hand", 
 });
 
 test("written type names fold onto ids, and an unknown one keeps itself", () => {
-  assert.equal(normaliseTypeId("Switch", T), "switch");
-  assert.equal(normaliseTypeId("switches", T), "switch");
-  assert.equal(normaliseTypeId("managed switch", T), "switch");
+  // `switch` predates the L2/L3 split; an unqualified one is what anybody writing it meant.
+  assert.equal(normaliseTypeId("Switch", T), "l2-switch");
+  assert.equal(normaliseTypeId("switches", T), "l2-switch");
+  assert.equal(normaliseTypeId("L2 switch", T), "l2-switch");
+  assert.equal(normaliseTypeId("layer-3-switch", T), "l3-switch");
+  assert.equal(normaliseTypeId("L3 Switch", T), "l3-switch");
+  assert.equal(normaliseTypeId("core switch", T), "l3-switch");
+  assert.equal(normaliseTypeId("managed switch", T), "l2-switch");
   assert.equal(normaliseTypeId("Access point", T), "ap");
   assert.equal(normaliseTypeId("Router / gateway", T), "router");
   // Not silently relabelled `other` — the health panel reports it so the typo is visible.
@@ -197,4 +202,54 @@ test("a single loose address line parses on its own", () => {
   const i = parseIfaceEntry("10.0.0.1 /24 (eth0, wired lab link)", "primary")!;
   assert.deepEqual([i.name, i.ip, i.prefix, i.note], ["eth0", "10.0.0.1", 24, "eth0, wired lab link"]);
   assert.equal(parseIfaceEntry("not an address", "primary"), null);
+});
+
+test("both ends of a link are recorded, under any of the spellings people use", () => {
+  const d = deviceFromNote(note("SW2", { device: "l2-switch", uplink: "[[SW1]]", uplink_port: 24, local_port: 1, ports: 8 }), T);
+  assert.equal(d.uplinkPort, 24, "the far end: a port on SW1");
+  assert.equal(d.localPort, 1, "the near end: a port on SW2 itself");
+  // `remote_port` reads more naturally to some people than `uplink_port`; `own port` likewise.
+  const alt = deviceFromNote(note("SW3", { device: "l2-switch", uplink: "[[SW1]]", "remote port": 12, "own port": 2 }), T);
+  assert.deepEqual([alt.uplinkPort, alt.localPort], [12, 2]);
+  // Neither is required — a wireless uplink has no ports at all.
+  const wireless = deviceFromNote(note("Phone", { device: "phone", uplink: "[[AP]]" }), T);
+  assert.deepEqual([wireless.uplinkPort, wireless.localPort], [null, null]);
+});
+
+test("managed is three-state, because silence is not a claim", () => {
+  const managed = (v: unknown) => deviceFromNote(note("SW", { device: "l2-switch", managed: v }), T).managed;
+  assert.equal(managed(true), true);
+  assert.equal(managed("managed"), true);
+  assert.equal(managed("web-smart"), true, "the marketing word for a cheap managed switch");
+  assert.equal(managed("SNMP"), true);
+  assert.equal(managed(false), false);
+  assert.equal(managed("unmanaged"), false);
+  assert.equal(managed("non-managed"), false);
+  assert.equal(managed("dumb"), false);
+  // Not recorded stays null: the health check must not invent a fault from an unanswered question.
+  assert.equal(managed(undefined), null);
+  assert.equal(managed("who knows"), null);
+});
+
+test("an L2 switch can be asked whether it is managed; a phone cannot", () => {
+  assert.ok(isManageable("l2-switch", T));
+  assert.ok(isManageable("l3-switch", T));
+  assert.ok(!isManageable("phone", T));
+  assert.ok(!isManageable("server", T));
+});
+
+test("a more specific type name beats a more general one inside the same phrase", () => {
+  // The bug this guards: "switch" matches before "l3" ever gets a look in.
+  assert.equal(normaliseTypeId("Cisco L3 switch", T), "l3-switch");
+  assert.equal(normaliseTypeId("48-port l2 switch", T), "l2-switch");
+  assert.equal(normaliseTypeId("poe access point", T), "ap");
+  assert.equal(normaliseTypeId("toaster", T), "toaster");
+});
+
+test("a games console never folds onto the switch type", () => {
+  // "Switch" is a Nintendo as often as it is a switch; only the console type may claim it, and it
+  // deliberately has no alias for it, so the word alone still means the network device.
+  assert.equal(normaliseTypeId("Nintendo Switch", T), "l2-switch");
+  assert.equal(normaliseTypeId("console", T), "console");
+  assert.equal(normaliseTypeId("games console", T), "console");
 });

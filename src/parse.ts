@@ -113,6 +113,16 @@ export function parseIfaceEntry(entry: unknown, fallbackName: string): Iface | n
   };
 }
 
+/** `managed: true`, `managed: unmanaged`, `managed: web-smart` — all of which people write. */
+function managedFrom(value: unknown): boolean | null {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value === "boolean") return value;
+  const text = String(value).trim().toLowerCase();
+  if (/^(un|non)[- ]?managed$|^dumb$|^no$|^false$/.test(text)) return false;
+  if (/managed|smart|cli|web|snmp|^yes$|^true$/.test(text)) return true;
+  return null;
+}
+
 const STATUSES: DeviceStatus[] = ["active", "planned", "offline", "retired"];
 
 function statusOf(raw: string | null): DeviceStatus {
@@ -204,7 +214,9 @@ export function deviceFromNote(note: NoteInput, types: DeviceType[]): Device {
     location: asString(pick(fm, "location", "room", "site")),
     ifaces,
     uplink: linkText(pick(fm, "uplink", "connectedto", "parent", "upstream")),
-    uplinkPort: asNumber(pick(fm, "uplink port", "uplinkport", "port on uplink", "parentport")),
+    uplinkPort: asNumber(pick(fm, "uplink port", "uplinkport", "remote port", "port on uplink", "parentport", "far port")),
+    localPort: asNumber(pick(fm, "local port", "localport", "own port", "this port", "near port", "uplink local port")),
+    managed: managedFrom(pick(fm, "managed", "management", "managed?")),
     ports: asNumber(pick(fm, "ports", "port count", "portcount")),
     poePorts: asList(pick(fm, "poe ports", "poeports", "poe")).map((v) => asNumber(v)).filter((n): n is number => n !== null),
     portConfig: portConfigFrom(pick(fm, "port config", "portconfig", "port map", "portmap")),
